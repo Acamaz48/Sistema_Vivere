@@ -2,12 +2,15 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule, RouterOutlet } from '@angular/router';
 import { UserStore } from './core/stores/user.store';
+import { ToastComponent } from './shared/components/toast.component'; // IMPORTANTE
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterModule],
+  imports: [CommonModule, RouterOutlet, RouterModule, ToastComponent], // ADD AQUI
   template: `
+    <app-toast></app-toast>
+
     <div class="app-shell" [class.is-auth-screen]="isLoginPage()">
       <aside class="sidebar" *ngIf="!isLoginPage()">
         <div class="sidebar__brand" (click)="router.navigate(['/dashboard'])">
@@ -62,7 +65,7 @@ import { UserStore } from './core/stores/user.store';
   styles: [`
     .app-shell { display: flex; height: 100vh; overflow: hidden; background: var(--bg-app); }
     .app-shell.is-auth-screen { background: var(--surface); }
-    .sidebar { width: 240px; flex-shrink: 0; background: var(--sidebar-bg); color: var(--sidebar-text); display: flex; flex-direction: column; border-right: 1px solid var(--sidebar-border); }
+    .sidebar { width: 240px; flex-shrink: 0; background: var(--sidebar-bg); color: var(--sidebar-text); display: flex; flex-direction: column; border-right: 1px solid var(--sidebar-border); z-index: 100; }
     .sidebar__brand { padding: 20px 20px 18px; border-bottom: 1px solid var(--sidebar-border); cursor: pointer; user-select: none; }
     .brand-mark { display: flex; align-items: center; gap: 10px; }
     .brand-dot { width: 8px; height: 8px; background: var(--vivere-orange); border-radius: 2px; box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.18); }
@@ -80,7 +83,7 @@ import { UserStore } from './core/stores/user.store';
     .btn-logout { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: transparent; color: var(--sidebar-text); border: 1px solid transparent; border-radius: var(--radius); cursor: pointer; font-size: 13px; font-weight: 500; transition: all var(--duration) var(--ease); }
     .btn-logout svg { width: 16px; height: 16px; }
     .btn-logout:hover { background: var(--sidebar-bg-hover); color: #ffaaaa; border-color: var(--sidebar-border); }
-    .main-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
+    .main-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; position: relative; z-index: 1; }
   `]
 })
 export class AppComponent {

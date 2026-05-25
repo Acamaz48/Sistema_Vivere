@@ -6,6 +6,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MaterialService } from '../../../core/services/material.service';
 import { ServiceOrderService, CreateOsPayload } from '../../../core/services/service-order.service';
 import { OperationalUnitService } from '../../../core/services/operational-unit.service';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-os-list',
@@ -91,46 +92,28 @@ import { OperationalUnitService } from '../../../core/services/operational-unit.
           </div>
 
           <div class="field-grid" style="margin-top: 15px;">
-  <div class="field">
-    <label>Data início (montagem)</label>
-    <input type="date" [(ngModel)]="osForm.dataInicio" />
-  </div>
+            <div class="field">
+              <label>Data início (montagem)</label>
+              <input type="date" [(ngModel)]="osForm.dataInicio" />
+            </div>
 
-  <div class="field">
-    <label>Data fim (desmontagem)</label>
-    <input type="date" [(ngModel)]="osForm.dataFim" />
-  </div>
-</div>
+            <div class="field">
+              <label>Data fim (desmontagem)</label>
+              <input type="date" [(ngModel)]="osForm.dataFim" />
+            </div>
+          </div>
 
-<div class="field-grid" style="margin-top: 15px;">
+          <div class="field-grid" style="margin-top: 15px;">
+            <div class="field">
+              <label>Unidade Operacional / Galpão</label>
+              <select [(ngModel)]="selectedOperationalUnitId">
+                <option value="">Selecione a unidade</option>
+                <option *ngFor="let unit of operationalUnits()" [value]="unit.id">{{ unit.name }}</option>
+              </select>
+            </div>
+          </div>
 
-  <div class="field">
-
-    <label>
-      Unidade Operacional / Galpão
-    </label>
-
-    <select [(ngModel)]="selectedOperationalUnitId">
-
-      <option value="">
-        Selecione a unidade
-      </option>
-
-      <option
-        *ngFor="let unit of operationalUnits()"
-        [value]="unit.id">
-
-        {{ unit.name }}
-
-      </option>
-
-    </select>
-
-  </div>
-
-</div>
-
-<h4 style="margin: 25px 0 10px; font-size: 12px; color: #666; text-transform: uppercase;">Endereço de Entrega</h4>
+          <h4 style="margin: 25px 0 10px; font-size: 12px; color: #666; text-transform: uppercase;">Endereço de Entrega</h4>
           <div class="field-grid" style="grid-template-columns: 2fr 1fr;">
             <div class="field">
               <label>Rua / Logradouro</label>
@@ -171,72 +154,23 @@ import { OperationalUnitService } from '../../../core/services/operational-unit.
           </div>
 
           <div class="add-row">
+            <select [(ngModel)]="tipoItemSelecionado" class="add-row__select">
+              <option value="estrutura">🏗️ Estrutura</option>
+              <option value="material">📦 Material Avulso</option>
+            </select>
 
-  <!-- TIPO -->
-  <select
-    [(ngModel)]="tipoItemSelecionado"
-    class="add-row__select">
+            <select *ngIf="tipoItemSelecionado === 'estrutura'" [(ngModel)]="estruturaSelecionadaId" class="add-row__select">
+              <option value="">— Escolha uma estrutura —</option>
+              <option *ngFor="let est of estruturasDoBanco()" [value]="est.id">{{ est.name }}</option>
+            </select>
 
-    <option value="estrutura">
-      🏗️ Estrutura
-    </option>
+            <select *ngIf="tipoItemSelecionado === 'material'" [(ngModel)]="materialSelecionadoId" class="add-row__select">
+              <option value="">— Escolha um material —</option>
+              <option *ngFor="let mat of materiaisDoBanco()" [value]="mat.id">{{ mat.name }}</option>
+            </select>
 
-    <option value="material">
-      📦 Material Avulso
-    </option>
-
-  </select>
-
-  <!-- SELECT ESTRUTURAS -->
-  <select
-    *ngIf="tipoItemSelecionado === 'estrutura'"
-    [(ngModel)]="estruturaSelecionadaId"
-    class="add-row__select">
-
-    <option value="">
-      — Escolha uma estrutura —
-    </option>
-
-    <option
-      *ngFor="let est of estruturasDoBanco()"
-      [value]="est.id">
-
-      {{ est.name }}
-
-    </option>
-
-  </select>
-
-  <!-- SELECT MATERIAIS -->
-  <select
-    *ngIf="tipoItemSelecionado === 'material'"
-    [(ngModel)]="materialSelecionadoId"
-    class="add-row__select">
-
-    <option value="">
-      — Escolha um material —
-    </option>
-
-    <option
-      *ngFor="let mat of materiaisDoBanco()"
-      [value]="mat.id">
-
-      {{ mat.name }}
-
-    </option>
-
-  </select>
-
-  <!-- BOTÃO -->
-  <button
-    class="btn-secondary"
-    (click)="adicionarItem()">
-
-    Adicionar
-
-  </button>
-
-</div>
+            <button class="btn-secondary" (click)="adicionarItem()">Adicionar</button>
+          </div>
 
           <div class="structures">
             <div *ngFor="let est of estruturasAdicionadas(); let gIndex = index" class="structure">
@@ -265,7 +199,7 @@ import { OperationalUnitService } from '../../../core/services/operational-unit.
 
         <footer class="os-doc__foot">
           <div class="foot-summary">
-            <span class="foot-label">Total de estruturas</span>
+            <span class="foot-label">Total de pacotes / blocos</span>
             <span class="foot-value mono">{{ estruturasAdicionadas().length }}</span>
           </div>
           <button class="btn-primary btn-primary--large" [disabled]="isSaving()" (click)="finalizarOS()">
@@ -333,21 +267,19 @@ import { OperationalUnitService } from '../../../core/services/operational-unit.
     .badge--danger { color: var(--status-danger); background: var(--status-danger-bg); border-color: var(--status-danger-border); }
     .badge--success { color: var(--status-success); background: var(--status-success-bg); border-color: var(--status-success-border); }
     .badge--neutral { color: var(--text-secondary); background: var(--surface-hover); border-color: var(--border-strong); }
-    
   `]
 })
 export class OSListComponent implements OnInit {
   private materialService = inject(MaterialService);
   private osService = inject(ServiceOrderService);
   private operationalUnitService = inject(OperationalUnitService);
+  private toastService = inject(ToastService); // INJEÇÃO DO TOAST
   public router = inject(Router);
   private destroyRef = inject(DestroyRef);
-
 
   today = new Date();
   isSaving = signal(false);
   osAtual: any = null;
-  
    
   estados = [ 'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO' ];
 
@@ -361,29 +293,28 @@ export class OSListComponent implements OnInit {
   estruturaSelecionadaId = '';
   tipoItemSelecionado = 'estrutura';
   materialSelecionadoId = '';
-  materiaisAvulsos = signal<any[]>([]);
   estruturasAdicionadas = signal<any[]>([]);
   selectedOperationalUnitId = '';
   operationalUnits = signal<any[]>([]);
 
   ngOnInit() {
     const token = localStorage.getItem('accessToken');
-  if (!token) {
-    console.warn('Sem token');
-    return;
-  }
-  this.operationalUnitService.getAll()
-  .pipe(takeUntilDestroyed(this.destroyRef))
-  .subscribe({
-    next: (data) => {
-      this.operationalUnits.set(data);
-
-      if (data.length > 0) {
-        this.selectedOperationalUnitId = data[0].id;
-      }
-    },
-    error: (err) => console.error(err)
-  });
+    if (!token) {
+      console.warn('Sem token');
+      return;
+    }
+    
+    this.operationalUnitService.getAll()
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe({
+      next: (data) => {
+        this.operationalUnits.set(data);
+        if (data.length > 0) {
+          this.selectedOperationalUnitId = data[0].id;
+        }
+      },
+      error: (err) => console.error(err)
+    });
 
     this.materialService.getStructures()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -399,99 +330,98 @@ export class OSListComponent implements OnInit {
     return mat ? mat.name : 'Material Desconhecido';
   }
 
+  // CORREÇÃO: Função roteadora de ações do botão principal
+  adicionarItem() {
+    if (this.tipoItemSelecionado === 'estrutura') {
+      this.addEstrutura();
+    } else {
+      this.addMaterialAvulso();
+    }
+  }
+
   addEstrutura() {
-    if (!this.estruturaSelecionadaId) return;
+    if (!this.estruturaSelecionadaId) {
+      this.toastService.warning("Por favor, selecione uma estrutura.");
+      return;
+    }
     const estrutura = this.estruturasDoBanco().find(e => e.id === this.estruturaSelecionadaId);
     if (estrutura) {
-      this.estruturasAdicionadas.update(prev => [...prev, estrutura]);
+      // Usamos JSON parse/stringify para garantir que adicionamos uma CÓPIA INDEPENDENTE 
+      // da estrutura, evitando bugs se a mesma for adicionada 2 vezes.
+      this.estruturasAdicionadas.update(prev => [...prev, JSON.parse(JSON.stringify(estrutura))]);
       this.estruturaSelecionadaId = '';
     }
   }
 
   addMaterialAvulso() {
-  const material = this.materiaisDoBanco()
-    .find((m: any) => m.id === this.materialSelecionadoId);
-  if (!material) return;
-  this.estruturasAdicionadas.update(lista => {
-    // verifica se já existe
-    const existente = lista.find(
-      item => item.id === material.id
-    );
-    // se existir → soma quantidade
-    if (existente) {
-      existente.templates[0].quantity++;
-      return [...lista];
+    if (!this.materialSelecionadoId) {
+      this.toastService.warning("Por favor, selecione um material.");
+      return;
     }
-    // se não existir → cria
-    return [
-      ...lista,
-      {
-        id: material.id,
-        name: material.name,
-        isMaterialAvulso: true,
-        templates: [
-          {
-            materialId: material.id,
-            quantity: 1
-          }
-        ]
+    const material = this.materiaisDoBanco().find((m: any) => m.id === this.materialSelecionadoId);
+    if (!material) return;
+    
+    this.estruturasAdicionadas.update(lista => {
+      // verifica se já existe na lista como avulso
+      const existente = lista.find(item => item.id === material.id && item.isMaterialAvulso);
+      // se existir → soma quantidade
+      if (existente) {
+        existente.templates[0].quantity++;
+        return [...lista];
       }
-    ];
-  });
+      // se não existir → cria um pacote visual (mock) que finge ser uma estrutura para o HTML
+      return [
+        ...lista,
+        {
+          id: material.id,
+          name: material.name,
+          isMaterialAvulso: true,
+          templates: [
+            { materialId: material.id, quantity: 1 }
+          ]
+        }
+      ];
+    });
 
-  this.materialSelecionadoId = '';
-}
+    this.materialSelecionadoId = '';
+  }
 
   removeEstrutura(index: number) {
     this.estruturasAdicionadas.update(prev => prev.filter((_, i) => i !== index));
   }
 
   prepararPayloadItens() {
-  console.log(
-    'UUID selecionado:',
-    this.selectedOperationalUnitId
-  );
+    const contadorMateriais: Record<string, number> = {};
 
-  const contadorMateriais: Record<string, number> = {};
+    // Como padronizamos tanto Estruturas quanto Materiais Avulsos dentro de "estruturasAdicionadas",
+    // apenas este bloco lida perfeitamente com toda a extração de dados!
+    this.estruturasAdicionadas().forEach(est => {
+      if (est.templates) {
+        est.templates.forEach((template: any) => {
+          const id = template.materialId;
+          contadorMateriais[id] = (contadorMateriais[id] || 0) + template.quantity;
+        });
+      }
+    });
 
-  // ESTRUTURAS
-  this.estruturasAdicionadas().forEach(est => {
-    if (est.templates) {
-      est.templates.forEach((template: any) => {
-        const id = template.materialId;
-        contadorMateriais[id] =
-          (contadorMateriais[id] || 0)
-          + template.quantity;
+    const payload = Object.keys(contadorMateriais).map(materialId => ({
+      materialId: materialId,
+      operationalUnitId: this.selectedOperationalUnitId,
+      quantity: contadorMateriais[materialId]
+    }));
 
-      });
-
-    }
-
-  });
-
-  // MATERIAIS AVULSOS
-  this.materiaisAvulsos().forEach(mat => {
-    contadorMateriais[mat.materialId] =
-      (contadorMateriais[mat.materialId] || 0)
-      + mat.quantity;
-
-  });
-  const payload = Object.keys(contadorMateriais).map(materialId => ({
-    materialId: materialId,
-    operationalUnitId:
-      this.selectedOperationalUnitId,
-    quantity:
-      contadorMateriais[materialId]
-
-  }));
-
-  console.log('Payload itens:', payload);
-  return payload;
-}
+    return payload;
+  }
 
   finalizarOS() {
     if (!this.osForm.nome || !this.osForm.dataInicio) {
-      alert("⚠️ Preencha pelo menos o Nome do Evento e a Data de Início."); return;
+      this.toastService.warning("Preencha pelo menos o Nome do Evento e a Data de Início.");
+      return;
+    }
+
+    if (!this.selectedOperationalUnitId) {
+      this.toastService.warning("Selecione uma Unidade Operacional / Galpão responsável.");
+      return;
     }
 
     this.isSaving.set(true);
@@ -501,7 +431,6 @@ export class OSListComponent implements OnInit {
     let endStr = this.osForm.dataFim ? this.osForm.dataFim : this.osForm.dataInicio;
     if (!endStr.includes('T')) endStr += 'T12:00:00';
 
-    // CORREÇÃO DE ARQUITETURA: Agora montamos um payload único e atómico.
     const unifiedPayload: CreateOsPayload = {
       eventName: this.osForm.nome,
       startDate: new Date(startStr).toISOString(),
@@ -514,17 +443,16 @@ export class OSListComponent implements OnInit {
       items: this.prepararPayloadItens()
     };
 
-    // Submetemos uma única requisição. O backend encarrega-se do resto!
     this.osService.createOS(unifiedPayload)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (osCriada) => {
-          alert("✅ Ordem de Serviço e Evento criados com sucesso (Status: DRAFT).");
+          this.toastService.success("Ordem de Serviço e Evento criados com sucesso.");
           this.osAtual = osCriada;
           this.isSaving.set(false);
         },
         error: (err) => { 
-          alert("❌ Falha ao criar OS: " + (err.error?.message || 'Erro desconhecido.')); 
+          this.toastService.error("Falha ao criar OS: " + (err.error?.message || 'Erro desconhecido.')); 
           this.isSaving.set(false); 
         }
       });
@@ -536,9 +464,9 @@ export class OSListComponent implements OnInit {
       .subscribe({
         next: (osAtualizada) => {
           this.osAtual = osAtualizada;
-          alert(`✅ Status da OS mudou para: ${osAtualizada.status}`);
+          this.toastService.info(`O status da OS mudou para: ${osAtualizada.status}`);
         },
-        error: (err) => alert(err.error?.message || "Erro ao submeter.")
+        error: (err) => this.toastService.error(err.error?.message || "Erro ao processar.")
       });
   }
 
@@ -548,9 +476,9 @@ export class OSListComponent implements OnInit {
       .subscribe({
         next: (osAtualizada) => {
           this.osAtual = osAtualizada;
-          alert("✅ OS Validada e Pronta (READY)!");
+          this.toastService.success("OS Validada e Pronta!");
         },
-        error: (err) => alert(err.error?.message || "Erro ao finalizar OS.")
+        error: (err) => this.toastService.error(err.error?.message || "Erro ao finalizar OS.")
       });
   }
 

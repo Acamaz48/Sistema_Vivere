@@ -3,7 +3,9 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { EventService, VivereEvent } from '../../../core/services/event.service';
+import { EventService } from '../../../core/services/event.service';
+import { UserStore } from '../../../core/stores/user.store';
+import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-event-list',
@@ -46,7 +48,7 @@ import { EventService, VivereEvent } from '../../../core/services/event.service'
             <tr>
               <th class="col-status"></th>
               <th>Evento / projeto</th>
-              <th>Status (OS)</th>
+              <th>Status Atual</th>
               <th class="col-date">Data início</th>
               <th>Local</th>
               <th class="col-actions"></th>
@@ -67,7 +69,7 @@ import { EventService, VivereEvent } from '../../../core/services/event.service'
               <td class="col-date mono">{{ event.startDate | date:'dd/MM/yyyy' }}</td>
               <td class="td-muted">{{ formatAddress(event) }}</td>
               <td class="col-actions">
-                <button class="btn-icon" (click)="abrirEdicao(event); $event.stopPropagation()" title="Editar Data/Nome">
+                <button class="btn-icon" (click)="abrirEdicao(event); $event.stopPropagation()" title="Editar Evento">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
               </td>
@@ -101,10 +103,21 @@ import { EventService, VivereEvent } from '../../../core/services/event.service'
 
           <div class="field-grid">
             <div class="field">
-              <label>Status (Via Máquina de Estados)</label>
-              <input [value]="statusLabel(editForm.status)" disabled style="background: #f1f5f9; cursor: not-allowed;"/>
-              <small style="font-size: 10px; color: var(--vivere-orange); margin-top: 4px;">O status deve ser alterado no painel da OS.</small>
+              <label>Status Operacional</label>
+              
+              <select [(ngModel)]="editForm.status" [disabled]="!podeEditarStatus()">
+                <option value="DRAFT">Rascunho / Planeamento</option>
+                <option value="ACTIVE">Ativo / No Galpão</option>
+                <option value="PENDING">Pendente / Devolvido</option>
+                <option value="READY">Aprovado / Finalizado</option>
+                <option value="CANCELLED">Cancelado</option>
+              </select>
+
+              <small *ngIf="!podeEditarStatus()" style="font-size: 10px; color: var(--status-danger); margin-top: 4px;">
+                O seu cargo não permite alterar o status.
+              </small>
             </div>
+            
             <div class="field">
               <label>Data início</label>
               <input type="date"
@@ -116,7 +129,7 @@ import { EventService, VivereEvent } from '../../../core/services/event.service'
 
         <footer class="modal__foot">
           <button class="btn-secondary" (click)="editForm = null">Cancelar</button>
-          <button class="btn-primary" (click)="salvarAlteracoes()">Atualizar Evento</button>
+          <button class="btn-primary" (click)="salvarAlteracoes()">Guardar Alterações</button>
         </footer>
       </div>
     </div>
@@ -155,6 +168,7 @@ import { EventService, VivereEvent } from '../../../core/services/event.service'
     .status-dot.pending { background: var(--status-warning); box-shadow: 0 0 0 3px var(--status-warning-bg); }
     .status-dot.active { background: var(--status-info); box-shadow: 0 0 0 3px var(--status-info-bg); }
     .status-dot.ready { background: var(--status-success); box-shadow: 0 0 0 3px var(--status-success-bg); }
+    .status-dot.cancelled { background: var(--status-danger); box-shadow: 0 0 0 3px var(--status-danger-bg); }
     .td-strong { font-weight: 500; color: var(--text-primary); }
     .td-sub { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .td-muted { color: var(--text-tertiary); }
@@ -164,6 +178,7 @@ import { EventService, VivereEvent } from '../../../core/services/event.service'
     .badge.active { color: var(--status-info); background: var(--status-info-bg); border-color: var(--status-info-border); }
     .badge.pending { color: var(--status-warning); background: var(--status-warning-bg); border-color: var(--status-warning-border); }
     .badge.ready { color: var(--status-success); background: var(--status-success-bg); border-color: var(--status-success-border); }
+    .badge.cancelled { color: var(--status-danger); background: var(--status-danger-bg); border-color: var(--status-danger-border); }
     .btn-icon { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--text-tertiary); cursor: pointer; transition: all var(--duration) var(--ease); }
     .btn-icon svg { width: 14px; height: 14px; }
     .btn-icon:hover { background: var(--surface-sunken); border-color: var(--border); color: var(--text-primary); }
@@ -184,19 +199,23 @@ import { EventService, VivereEvent } from '../../../core/services/event.service'
     .field { display: flex; flex-direction: column; gap: 6px; }
     .field label { font-size: 11.5px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-secondary); }
     .field input, .field select, .field textarea { padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: 13.5px; color: var(--text-primary); transition: border-color var(--duration) var(--ease); }
-    .field input:focus { outline: none; border-color: var(--vivere-orange); box-shadow: 0 0 0 3px rgba(255,102,0,0.12); }
+    .field input:focus, .field select:focus { outline: none; border-color: var(--vivere-orange); box-shadow: 0 0 0 3px rgba(255,102,0,0.12); }
+    .field input:disabled, .field select:disabled { background: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
     .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .modal__foot { padding: 14px 22px; border-top: 1px solid var(--border); background: var(--surface-sunken); display: flex; justify-content: flex-end; gap: 8px; }
   `]
 })
 export class EventListComponent implements OnInit {
   private eventService = inject(EventService);
+  private toastService = inject(ToastService);
+  public userStore = inject(UserStore); // INJEÇÃO PARA VERIFICAR CARGO
   public router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
   filter = 'ALL';
   events = signal<any[]>([]);
   editForm: any | null = null; 
+  originalStatus = '';
 
   ngOnInit() { this.loadEvents(); }
 
@@ -205,7 +224,7 @@ export class EventListComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (data) => this.events.set(data),
-        error: (err) => console.error('Erro ao carregar eventos:', err)
+        error: (err) => this.toastService.error('Falha ao carregar eventos.')
       });
   }
 
@@ -222,13 +241,14 @@ export class EventListComponent implements OnInit {
     return ({
       'DRAFT': 'Rascunho (OS)',
       'ACTIVE': 'No Galpão',
-      'PENDING': 'Devolvido (Pendente)',
-      'READY': 'Pronto/Aprovado'
+      'PENDING': 'Pendente',
+      'READY': 'Aprovado',
+      'CANCELLED': 'Cancelado'
     } as Record<string, string>)[status] || status;
   }
 
   badgeClass(status: string): string {
-    return status.toLowerCase();
+    return status?.toLowerCase() || '';
   }
 
   formatAddress(event: any): string {
@@ -238,35 +258,56 @@ export class EventListComponent implements OnInit {
     return '—';
   }
 
+  // Lógica de Permissão
+  podeEditarStatus(): boolean {
+    const role = this.userStore.currentUser()?.role;
+    return role === 'ADMIN' || role === 'PRODUCAO';
+  }
+
   abrirEdicao(event: any) {
-    // Agora o id que precisamos passar para o PUT é o id da OS, pois o EventService envelopa a OS
     this.editForm = { ...event };
+    this.originalStatus = event.status; // Guardamos para saber se foi alterado
   }
 
   salvarAlteracoes() {
-    if (this.editForm && this.editForm.id) {
-      
-      let startStr = this.editForm.startDate as string;
-      if (!startStr.includes('T')) startStr += 'T12:00:00';
+    if (!this.editForm || !this.editForm.id) return;
 
-      // Correção do Contrato: Enviamos 'eventName' como o UpdateServiceOrderDto espera
-      const payloadLimpo = {
-        eventName: this.editForm.name,
-        startDate: new Date(startStr).toISOString()
-        // O status é deliberadamente omitido aqui para respeitar o pipeline de aprovação
-      };
+    let startStr = this.editForm.startDate as string;
+    if (!startStr.includes('T')) startStr += 'T12:00:00';
 
-      // O EventService.updateEvent mapeia para PUT /service-orders/:id
-      this.eventService.updateEvent(this.editForm.id, payloadLimpo)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: () => {
-            alert('✅ Registro atualizado com sucesso!');
-            this.editForm = null;
-            this.loadEvents();
-          },
-          error: (err: any) => alert('❌ Erro ao salvar: ' + (err.error?.message || err.message))
-        });
-    }
+    // 1. Prepara a atualização de Nome e Data (Vai para a Rota de OS usando o osId)
+    const payloadLimpo = {
+      eventName: this.editForm.name,
+      startDate: new Date(startStr).toISOString()
+    };
+
+    // Dispara a primeira chamada...
+    this.eventService.updateEvent(this.editForm.osId, payloadLimpo)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          // 2. Se o utilizador mexeu no status, fazemos a segunda chamada em sequência
+          if (this.editForm.status !== this.originalStatus) {
+            this.eventService.updateEventStatus(this.editForm.id, this.editForm.status)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe({
+                next: () => {
+                  this.toastService.success('Evento e Status alterados!');
+                  this.finalizarSalvamento();
+                },
+                error: (err) => this.toastService.error('Erro ao atualizar status: ' + err.error?.message)
+              });
+          } else {
+            this.toastService.success('Dados atualizados com sucesso!');
+            this.finalizarSalvamento();
+          }
+        },
+        error: (err: any) => this.toastService.error('❌ Erro ao salvar dados: ' + (err.error?.message || err.message))
+      });
+  }
+
+  finalizarSalvamento() {
+    this.editForm = null;
+    this.loadEvents();
   }
 }

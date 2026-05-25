@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ToastService } from '../../core/services/toast.service';
 
 @Component({
   selector: 'app-operational-units',
@@ -40,7 +41,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
               </td>
               <td><span class="status-dot completed" title="Ativo"></span> Ativo</td>
               <td class="cell-center">
-                <button class="btn-icon" (click)="deletarUnidade(unit.id)" title="Remover">🗑️</button>
+                <button class="btn-icon" (click)="abrirConfirmacaoExclusao(unit.id)" title="Remover">🗑️</button>
               </td>
             </tr>
             <tr *ngIf="isLoading()">
@@ -79,6 +80,24 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
         </footer>
       </div>
     </div>
+
+    <div *ngIf="confirmarId" class="modal-overlay" (click)="confirmarId = null">
+      <div class="modal modal--small" (click)="$event.stopPropagation()">
+        <div class="modal__body" style="text-align: center; padding: 32px 24px;">
+          <div class="icon-warning">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h3 style="margin: 16px 0 8px; font-size: 18px; color: var(--text-strong);">Excluir unidade?</h3>
+          <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">
+            Esta ação não pode ser desfeita. Todos os dados associados a este galpão poderão ser afetados.
+          </p>
+        </div>
+        <footer class="modal__foot" style="justify-content: center; background: transparent; border-top: none; padding-bottom: 24px;">
+          <button class="btn-secondary" (click)="confirmarId = null">Cancelar</button>
+          <button class="btn-primary btn--danger" (click)="deletarUnidade()">Sim, excluir</button>
+        </footer>
+      </div>
+    </div>
   `,
   styles: [`
     .page-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 18px 28px; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -89,6 +108,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
     .btn-primary:disabled { background: var(--surface-sunken); color: var(--text-muted); border-color: var(--border); cursor: not-allowed; }
     .btn-primary svg { width: 16px; height: 16px; }
     .btn-secondary { padding: 8px 13px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; background: var(--surface); border: 1px solid var(--border); }
+    .btn--danger { background: var(--status-danger); border-color: var(--status-danger); }
+    .btn--danger:hover { background: #b91c1c; border-color: #b91c1c; }
     .admin-main { padding: 20px 28px; }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
     .card.no-padding { padding: 0; overflow: hidden; }
@@ -104,6 +125,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
     
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 3000; }
     .modal { width: 400px; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); display: flex; flex-direction: column; }
+    .modal--small { width: 360px; }
     .modal__head { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; }
     .modal__eyebrow { font-size: 10.5px; font-weight: 600; color: var(--vivere-orange); display: block; margin-bottom: 4px; }
     .modal__head h3 { margin: 0; font-size: 16px; font-weight: 600; }
@@ -115,19 +137,25 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
     .field input:focus { border-color: var(--vivere-orange); }
     .field input:disabled { background: #f1f5f9; color: #94a3b8; }
     .modal__foot { padding: 15px 22px; background: var(--surface-sunken); border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+    
+    .icon-warning { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 50%; background: var(--status-warning-bg); color: var(--status-warning); margin: 0 auto; }
+    .icon-warning svg { width: 24px; height: 24px; }
   `]
 })
 export class OperationalUnitsComponent implements OnInit {
   private http = inject(HttpClient);
   private destroyRef = inject(DestroyRef);
+  private toastService = inject(ToastService); // INJEÇÃO DO TOAST
 
   units = signal<any[]>([]);
   showModal = false;
   isLoading = signal(true);
   isSaving = signal(false);
   
+  confirmarId: string | null = null; // Controle da modal de exclusão
+  
   formData = { name: '' };
-  private apiUrl = 'http://localhost:8081/operational-units'; // Exige que o backend tenha este endpoint
+  private apiUrl = 'http://localhost:8081/operational-units';
 
   ngOnInit() {
     this.carregarUnidades();
@@ -143,7 +171,7 @@ export class OperationalUnitsComponent implements OnInit {
           this.isLoading.set(false);
         },
         error: (err) => {
-          console.error('Falha ao buscar unidades', err);
+          this.toastService.error('Falha ao buscar unidades.');
           this.isLoading.set(false);
         }
       });
@@ -159,33 +187,47 @@ export class OperationalUnitsComponent implements OnInit {
   }
 
   salvarUnidade() {
-    if (!this.formData.name) return;
+    if (!this.formData.name) {
+      this.toastService.warning('Preencha o nome do galpão.');
+      return;
+    }
     this.isSaving.set(true);
 
     this.http.post(this.apiUrl, this.formData)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
-          alert('Galpão criado com sucesso!');
+          this.toastService.success('Galpão criado com sucesso!');
           this.carregarUnidades();
           this.fecharModal();
           this.isSaving.set(false);
         },
         error: (err) => {
-          alert('Erro ao salvar: ' + (err.error?.message || 'Falha na rede'));
+          this.toastService.error(err.error?.message || 'Falha ao salvar galpão');
           this.isSaving.set(false);
         }
       });
   }
 
-  deletarUnidade(id: string) {
-    if (confirm('Tem certeza que deseja remover esta unidade?')) {
-      this.http.delete(`${this.apiUrl}/${id}`)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: () => this.carregarUnidades(),
-          error: (err) => alert('Erro ao excluir: ' + (err.error?.message || 'Conflito de chave'))
-        });
-    }
+  abrirConfirmacaoExclusao(id: string) {
+    this.confirmarId = id;
+  }
+
+  deletarUnidade() {
+    if (!this.confirmarId) return;
+
+    this.http.delete(`${this.apiUrl}/${this.confirmarId}`)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.toastService.success('Unidade removida com sucesso!');
+          this.confirmarId = null;
+          this.carregarUnidades();
+        },
+        error: (err) => {
+          this.toastService.error(err.error?.message || 'Erro ao excluir unidade. Pode haver itens vinculados.');
+          this.confirmarId = null;
+        }
+      });
   }
 }

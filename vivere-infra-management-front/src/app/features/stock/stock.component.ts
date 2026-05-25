@@ -1,10 +1,9 @@
-// vivere-infra-management-front\src\app\features\stock\stock.component.ts
-
 import { Component, inject, signal, OnInit, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MaterialService } from '../../core/services/material.service';
+import { ToastService } from '../../core/services/toast.service';
 import { Material, Structure, CreateMaterialPayload, CreateStructurePayload } from '../../shared/models/material.model';
 
 @Component({
@@ -70,7 +69,7 @@ import { Material, Structure, CreateMaterialPayload, CreateStructurePayload } fr
                   </span>
                 </td>
                 <td style="text-align: center;">
-                  <button class="btn-icon" (click)="deletarMaterial(item.id)" title="Remover Material">
+                  <button class="btn-icon" (click)="abrirConfirmacao('material', item.id)" title="Remover Material">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                   </button>
                 </td>
@@ -114,7 +113,7 @@ import { Material, Structure, CreateMaterialPayload, CreateStructurePayload } fr
               <h2 class="detail-title">{{ estSelecionada.name }}</h2>
             </div>
             <div class="detail-actions">
-              <button class="btn-icon" style="color: #d32f2f" (click)="deletarEstrutura(estSelecionada.id)">
+              <button class="btn-icon" style="color: #d32f2f" (click)="abrirConfirmacao('estrutura', estSelecionada.id)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Excluir
               </button>
             </div>
@@ -162,9 +161,7 @@ import { Material, Structure, CreateMaterialPayload, CreateStructurePayload } fr
             <span class="modal__eyebrow">Novo Registro</span>
             <h3>Cadastrar Material Base</h3>
           </div>
-          <button class="btn-close" (click)="showMaterialModal = false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+          <button class="btn-close" (click)="showMaterialModal = false">✕</button>
         </header>
         <div class="modal__body">
           <div class="field">
@@ -198,9 +195,7 @@ import { Material, Structure, CreateMaterialPayload, CreateStructurePayload } fr
             <span class="modal__eyebrow">Agrupamento lógico</span>
             <h3>Criar Estrutura / Gabarito</h3>
           </div>
-          <button class="btn-close" (click)="showStructureModal = false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+          <button class="btn-close" (click)="showStructureModal = false">✕</button>
         </header>
         <div class="modal__body" style="max-height: 60vh; overflow-y: auto;">
           <div class="field-grid">
@@ -237,6 +232,24 @@ import { Material, Structure, CreateMaterialPayload, CreateStructurePayload } fr
         </footer>
       </div>
     </div>
+
+    <div *ngIf="confirmarExclusao.id" class="modal-overlay" (click)="confirmarExclusao.id = null">
+      <div class="modal modal--small" (click)="$event.stopPropagation()">
+        <div class="modal__body" style="text-align: center; padding: 32px 24px;">
+          <div class="icon-warning">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h3 style="margin: 16px 0 8px; font-size: 18px; color: var(--text-strong);">Excluir {{ confirmarExclusao.tipo === 'material' ? 'material' : 'estrutura' }}?</h3>
+          <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">
+            Esta ação não poderá ser desfeita.
+          </p>
+        </div>
+        <footer class="modal__foot" style="justify-content: center; background: transparent; border-top: none; padding-bottom: 24px;">
+          <button class="btn-secondary" (click)="confirmarExclusao.id = null">Cancelar</button>
+          <button class="btn-primary btn--danger" (click)="executarExclusao()">Sim, excluir</button>
+        </footer>
+      </div>
+    </div>
   `,
   styles: [`
     .page-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 18px 28px; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -251,6 +264,8 @@ import { Material, Structure, CreateMaterialPayload, CreateStructurePayload } fr
     .btn-primary:hover:not(:disabled) { background: var(--vivere-orange-hover); border-color: var(--vivere-orange-hover); }
     .btn-secondary { background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); }
     .btn-secondary:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-hover); }
+    .btn--danger { background: var(--status-danger); border-color: var(--status-danger); }
+    .btn--danger:hover { background: #b91c1c; border-color: #b91c1c; }
     .filter-tabs { display: flex; gap: 0; padding: 0 28px; background: var(--surface); border-bottom: 1px solid var(--border); }
     .filter-tabs button { padding: 12px 14px; background: transparent; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 13px; font-weight: 500; color: var(--text-tertiary); cursor: pointer; transition: color var(--duration) var(--ease), border-color var(--duration) var(--ease); }
     .filter-tabs button:hover { color: var(--text-primary); }
@@ -302,10 +317,10 @@ import { Material, Structure, CreateMaterialPayload, CreateStructurePayload } fr
     .btn-icon:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-icon:hover:not(:disabled) { background: var(--surface-sunken); border-color: var(--border); color: var(--text-primary); }
 
-    /* ESTILOS DO MODAL */
     .modal-overlay { position: fixed; inset: 0; background: rgba(15,15,15,0.55); display: flex; align-items: center; justify-content: center; z-index: 3000; backdrop-filter: blur(2px); animation: fadeIn 150ms var(--ease); }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     .modal { width: 460px; max-width: calc(100% - 40px); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); display: flex; flex-direction: column; animation: scaleIn 150ms var(--ease); }
+    .modal--small { width: 360px; }
     @keyframes scaleIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
     .modal__head { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; }
     .modal__eyebrow { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--vivere-orange); margin-bottom: 4px; }
@@ -321,11 +336,14 @@ import { Material, Structure, CreateMaterialPayload, CreateStructurePayload } fr
     .field input:disabled, .field select:disabled { background: #f1f5f9; color: #94a3b8; }
     .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .modal__foot { padding: 14px 22px; border-top: 1px solid var(--border); background: var(--surface-sunken); display: flex; justify-content: flex-end; gap: 8px; }
+    .icon-warning { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 50%; background: var(--status-warning-bg); color: var(--status-warning); margin: 0 auto; }
+    .icon-warning svg { width: 24px; height: 24px; }
   `]
 })
 export class StockComponent implements OnInit {
   private materialService = inject(MaterialService);
-  private destroyRef = inject(DestroyRef); // CORREÇÃO: Prevenção de Fuga de Memória
+  private destroyRef = inject(DestroyRef);
+  private toastService = inject(ToastService); // INJEÇÃO DO TOAST
 
   tab = 'inventario';
   
@@ -336,7 +354,9 @@ export class StockComponent implements OnInit {
   showMaterialModal = false;
   showStructureModal = false;
   
-  // CORREÇÃO: Controles de estado para evitar Double Click / Sobrecarregar Servidor
+  // Controle universal para confirmação de exclusão
+  confirmarExclusao: { tipo: 'material' | 'estrutura' | null, id: string | null } = { tipo: null, id: null };
+  
   isLoading = signal(true);
   isSaving = signal(false);
 
@@ -358,7 +378,7 @@ export class StockComponent implements OnInit {
           this.isLoading.set(false);
         },
         error: (err) => {
-          console.error("Erro materiais", err);
+          this.toastService.error("Erro ao carregar materiais");
           this.isLoading.set(false);
         }
       });
@@ -368,18 +388,19 @@ export class StockComponent implements OnInit {
       .subscribe({
         next: (data) => {
           this.estruturas.set(data);
-          // Atualiza a referência da estrutura selecionada caso a base de dados mude
           if (this.estSelecionada) {
             this.estSelecionada = data.find(e => e.id === this.estSelecionada!.id) || null;
           }
         },
-        error: (err) => console.error("Erro estruturas", err)
+        error: (err) => this.toastService.error("Erro ao carregar estruturas")
       });
-
   }
 
   salvarMaterial() {
-    if (!this.formMaterial.name || !this.formMaterial.categoryName) return alert('Preencha os dados obrigatórios!');
+    if (!this.formMaterial.name || !this.formMaterial.categoryName) {
+      this.toastService.warning('Preencha os dados obrigatórios!');
+      return;
+    }
     
     this.isSaving.set(true);
     
@@ -387,28 +408,55 @@ export class StockComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
-          alert('Material salvo com sucesso no catálogo!');
+          this.toastService.success('Material salvo com sucesso no catálogo!');
           this.showMaterialModal = false;
           this.formMaterial = { name: '', categoryName: '', stock: 0 };
           this.carregarDados();
           this.isSaving.set(false);
         },
         error: (err) => {
-          console.log(err);
-          alert(err.error?.message || 'Erro ao salvar material.');
+          this.toastService.error(err.error?.message || 'Erro ao salvar material.');
           this.isSaving.set(false);
         }
       });
   }
 
-  deletarMaterial(id: string) {
-    if (confirm('Tem certeza que deseja excluir este material do catálogo?')) {
+  abrirConfirmacao(tipo: 'material' | 'estrutura', id: string) {
+    this.confirmarExclusao = { tipo, id };
+  }
+
+  executarExclusao() {
+    const { tipo, id } = this.confirmarExclusao;
+    if (!id || !tipo) return;
+
+    if (tipo === 'material') {
       this.materialService.deleteMaterial(id)
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
-          next: () => this.carregarDados(),
-          // O backend novo que desenhamos devolve uma mensagem limpa se houver erro de Chave Estrangeira
-          error: (err) => alert(err.error?.message || 'Erro ao excluir o material.')
+          next: () => {
+            this.toastService.success('Material removido do catálogo!');
+            this.confirmarExclusao = { tipo: null, id: null };
+            this.carregarDados();
+          },
+          error: (err) => {
+            this.toastService.error(err.error?.message || 'Erro ao excluir o material.');
+            this.confirmarExclusao = { tipo: null, id: null };
+          }
+        });
+    } else {
+      this.materialService.deleteStructure(id)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: () => {
+            this.toastService.success('Estrutura removida!');
+            this.estSelecionada = null;
+            this.confirmarExclusao = { tipo: null, id: null };
+            this.carregarDados();
+          },
+          error: (err) => {
+            this.toastService.error(err.error?.message || 'Erro ao excluir a estrutura.');
+            this.confirmarExclusao = { tipo: null, id: null };
+          }
         });
     }
   }
@@ -427,12 +475,17 @@ export class StockComponent implements OnInit {
   }
 
   salvarEstrutura() {
-    if (!this.formStructure.structureName) return alert('Dê um nome para a estrutura');
+    if (!this.formStructure.structureName) {
+      this.toastService.warning('Dê um nome para a estrutura');
+      return;
+    }
     
-    // Limpa itens vazios (quebrados) antes de enviar
     this.formStructure.items = this.formStructure.items.filter(i => i.materialId && i.quantity > 0);
     
-    if (this.formStructure.items.length === 0) return alert('Adicione pelo menos um material válido na composição.');
+    if (this.formStructure.items.length === 0) {
+      this.toastService.warning('Adicione pelo menos um material válido na composição.');
+      return;
+    }
 
     this.isSaving.set(true);
 
@@ -440,30 +493,16 @@ export class StockComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
-          alert('Gabarito salvo com sucesso!');
+          this.toastService.success('Gabarito salvo com sucesso!');
           this.showStructureModal = false;
           this.carregarDados();
           this.isSaving.set(false);
         },
         error: (err) => {
-          alert(err.error?.message || 'Erro ao salvar a Estrutura.');
+          this.toastService.error(err.error?.message || 'Erro ao salvar a Estrutura.');
           this.isSaving.set(false);
         }
       });
-  }
-
-  deletarEstrutura(id: string) {
-    if (confirm('Atenção: Tem a certeza de que deseja apagar essa estrutura e a sua composição?')) {
-      this.materialService.deleteStructure(id)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: () => {
-            this.estSelecionada = null;
-            this.carregarDados();
-          },
-          error: (err) => alert(err.error?.message || 'Erro ao excluir a estrutura.')
-        });
-    }
   }
 
   getNomeMaterial(id: string): string {

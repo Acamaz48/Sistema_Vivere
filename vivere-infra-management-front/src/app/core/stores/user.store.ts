@@ -5,6 +5,8 @@ import { User, UserRole } from '../../shared/models/user.model';
 export class UserStore {
   private userSignal = signal<User | null>(null);
   
+  // NOVO: Exposto para que a UI possa ler o cargo atual
+  currentUser = computed(() => this.userSignal());
   isAuthenticated = computed(() => this.userSignal() !== null);
   
   isAdmin = computed(() => {
@@ -32,14 +34,10 @@ export class UserStore {
     const token = localStorage.getItem('accessToken');
     if (token) {
       try {
-        // CORREÇÃO CRÍTICA: Decodificação segura de Base64Url (Padrão JWT)
         let payloadBase64 = token.split('.')[1];
         payloadBase64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
         const payloadJson = JSON.parse(atob(payloadBase64));
         
-        // CORREÇÃO DE ARQUITETURA: Hack de Bypass removido.
-        // Agora o cargo vem diretamente do Token assinado pelo Backend.
-        // Utilizamos o fallback para 'PRODUCAO' apenas se o token for muito antigo (transição).
         const cargoRealDoBanco = payloadJson.role || UserRole.PRODUCAO;
 
         this.userSignal.set({
@@ -60,6 +58,6 @@ export class UserStore {
 
   logout() {
     this.userSignal.set(null);
-    localStorage.clear(); // Limpa tokens corrompidos ou expirados
+    localStorage.clear();
   }
 }
