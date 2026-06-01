@@ -112,7 +112,7 @@ export interface DashboardWidget {
               <span class="card__title">Localização de eventos</span>
             </div>
             <button *ngIf="isEditMode" class="btn-remove-widget" (click)="hideWidget('map')" title="Ocultar">✕</button>
-            <span *ngIf="!isEditMode" class="card__hint">Atualizado agora</span>
+            <span *ngIf="!isEditMode" class="card__hint">{{ mapMarkers.length }} evento(s) no mapa</span>
           </header>
           <div class="card__body card__body--flush" style="position: relative;">
             <div *ngIf="isEditMode" class="widget-blocker"></div>
@@ -514,12 +514,9 @@ export class DashboardComponent implements OnInit {
   public eventService = inject(EventService);
   public materialService = inject(MaterialService);
   private host: ElementRef<HTMLElement> = inject(ElementRef);
-  
+
   /**
    * INJEÇÃO DE PROTEÇÃO DE MEMÓRIA (Memory Leak Prevention)
-   * Utilizado pelo operador RxJS takeUntilDestroyed para matar as escutas
-   * de rede ativas (HttpClient) no exato momento que o utilizador 
-   * sai do Dashboard, liberando a RAM do navegador.
    */
   private destroyRef = inject(DestroyRef);
 
@@ -590,7 +587,6 @@ export class DashboardComponent implements OnInit {
     this.draggedWidgetId = id;
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';
-      // Firefox exige data setada para iniciar o drag
       event.dataTransfer.setData('text/plain', id);
     }
   }
@@ -599,14 +595,12 @@ export class DashboardComponent implements OnInit {
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
 
-    // Sobre si mesmo: não destaca
     if (!this.draggedWidgetId || this.draggedWidgetId === targetId) {
       this.dropTargetId = null;
       this.dropPosition = null;
       return;
     }
 
-    // Decide "antes" ou "depois" pela posição vertical do mouse no alvo
     const targetEl = event.currentTarget as HTMLElement;
     const rect = targetEl.getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
@@ -623,12 +617,10 @@ export class DashboardComponent implements OnInit {
       return;
     }
 
-    // Captura posições ANTES da reordenação (parte 1 do FLIP)
     const oldRects = this.captureRects();
     const position = this.dropPosition;
     const draggedId = this.draggedWidgetId;
 
-    // Ordena por order para trabalhar com índices reais
     const sorted = [...this.layoutConfig].sort((a, b) => a.order - b.order);
     const draggedIdx = sorted.findIndex(w => w.id === draggedId);
     let targetIdx = sorted.findIndex(w => w.id === targetId);
@@ -638,30 +630,21 @@ export class DashboardComponent implements OnInit {
       return;
     }
 
-    // Remove o item arrastado da lista
     const [item] = sorted.splice(draggedIdx, 1);
-
-    // Compensa o índice do alvo se o item removido estava antes dele
     if (draggedIdx < targetIdx) targetIdx--;
-
-    // Insere antes ou depois do alvo de acordo com a posição do mouse
     const insertIdx = position === 'after' ? targetIdx + 1 : targetIdx;
     sorted.splice(insertIdx, 0, item);
 
-    // Aplica novos valores de order
     sorted.forEach((w, i) => {
       const orig = this.layoutConfig.find(o => o.id === w.id);
       if (orig) orig.order = i + 1;
     });
 
     this.cleanupDrag();
-
-    // Após o Angular atualizar o DOM, mede novas posições e anima a diferença (parte 2 do FLIP)
     requestAnimationFrame(() => this.flipAnimate(oldRects));
   }
 
   onDragEnd() {
-    // Garante limpeza do estado mesmo se o usuário cancelar (Esc, soltar fora, etc.)
     this.cleanupDrag();
   }
 
@@ -683,11 +666,6 @@ export class DashboardComponent implements OnInit {
     return map;
   }
 
-  /**
-   * Animação FLIP: cada widget começa transladado pra sua posição antiga
-   * e anima de volta pra translate(0,0), produzindo movimento fluido
-   * mesmo com CSS `order` (que normalmente não transiciona).
-   */
   private flipAnimate(oldRects: Map<string, DOMRect>) {
     const cards = this.host.nativeElement.querySelectorAll<HTMLElement>('.widget-card[data-widget-id]');
     cards.forEach(el => {
@@ -749,14 +727,9 @@ export class DashboardComponent implements OnInit {
     while (this.calendarDays.length % 7 !== 0) this.calendarDays.push(-100);
   }
 
-  /**
-   * BLINDAGEM DE TRANSAÇÕES
-   * O pipe com takeUntilDestroyed garante que se o backend demorar
-   * para responder e o usuário fechar a tela, o Observable será cancelado.
-   */
   carregarDadosReais() {
     this.eventService.getEvents()
-      .pipe(takeUntilDestroyed(this.destroyRef)) // Proteção ativada contra vazamentos
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((eventos) => {
         this.todosEventos = eventos;
 
@@ -768,24 +741,33 @@ export class DashboardComponent implements OnInit {
           .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
           .slice(0, 7);
 
-        this.mapMarkers = ativos.filter(e => e.latitude && e.longitude).map(e => {
-          const dataStr = new Date(e.startDate).toLocaleDateString('pt-BR');
-          const statusTraduzido = e.status === 'PENDING' ? 'Pendente/Planejamento' : 'Em andamento';
+        // =====================================================================
+        // CORREÇÃO: as coordenadas ficam em e.address.latitude / e.address.longitude
+        // (não mais em e.latitude / e.longitude direto na raiz do evento)
+        // =====================================================================
+        this.mapMarkers = ativos
+          .filter(e => e.address?.latitude && e.address?.longitude)
+          .map(e => {
+            const dataStr = new Date(e.startDate).toLocaleDateString('pt-BR');
+            const statusTraduzido = e.status === 'PENDING' ? 'Pendente / Planejamento' : 'Em andamento';
+            const cidadeStr = e.address?.city
+              ? `<br>Local: ${e.address.city}${e.address.state ? ' — ' + e.address.state : ''}`
+              : '';
 
-          return {
-            lat: e.latitude,
-            lng: e.longitude,
-            title: e.name,
-            info: `Status: <b>${statusTraduzido}</b><br>Data: ${dataStr}`
-          };
-        });
+            return {
+              lat:   e.address.latitude,
+              lng:   e.address.longitude,
+              title: e.name,
+              info:  `Status: <b>${statusTraduzido}</b><br>Data: ${dataStr}${cidadeStr}`
+            };
+          });
       });
 
     this.materialService.getMaterials()
-      .pipe(takeUntilDestroyed(this.destroyRef)) // Proteção ativada contra vazamentos
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((materiais) => {
         this.totalMateriais = materiais.length;
-        this.totalMateriaisAlerta = materiais.filter(m => m.stock < 10).length;
+        this.totalMateriaisAlerta = materiais.filter((m: any) => m.stock < 10).length;
         this.gerarGraficoMateriais(materiais);
       });
   }
@@ -802,12 +784,12 @@ export class DashboardComponent implements OnInit {
 
   gerarGraficoMateriais(materiais: any[]) {
     const topMateriais = materiais.slice(0, 6);
-    const labelsMateriais = topMateriais.map(m => m.name.substring(0, 15));
-    const quantidades = topMateriais.map(m => m.stock);
+    const labelsMateriais = topMateriais.map((m: any) => m.name.substring(0, 15));
+    const quantidades = topMateriais.map((m: any) => m.stock);
 
     const ctx = document.getElementById('stockChart') as HTMLCanvasElement;
     if (ctx) {
-      if (this.chartInstance) this.chartInstance.destroy(); // Evita fantasmas no canvas re-renderizado
+      if (this.chartInstance) this.chartInstance.destroy();
       this.chartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
